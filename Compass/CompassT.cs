@@ -54,8 +54,8 @@ namespace Compass
         //PlayerID - Colony of the LAST direction
         public static Dictionary<NetworkID, CompassLastAction> last_Compass_Action = new Dictionary<NetworkID, CompassLastAction>();
 
-        public static readonly int[] angles = new int[] { 0, 90, 180, 270, 360 };
-        public static readonly int angleDiff = 20;  //Diff between angles (Example: 0º = Forward, [0+angleDiff, 90-angleDiff] = Forward + Right)
+        public static readonly int[] angles = new int[] { 0, 90, 180 };  //The result of the Unity's method to calculate the angle is never greater than 180
+        public static readonly int angleDiff = 20;  //Diff between angles ~90/4. Example of use: Forward = [-angleDiff, angleDiff]
 
         //Item Interaction
         //Left CLick = Show UI
@@ -174,39 +174,11 @@ namespace Compass
         }
 
         //Return the angle (degrees º) between Target(Vector) and Source(Vector) WITHOUT considering the Y AXIS
+        // The result is between [-180, 180]
+        // Positive in a clockwise direction and negative in an anti-clockwise direction.
         public static int getAngle(Pipliz.Vector3Int TargetDirection, Pipliz.Vector3Int SourceDirection)
         {
-            return (int)UnityEngine.Vector3.Angle(new UnityEngine.Vector3(SourceDirection.x, SourceDirection.z), new UnityEngine.Vector3(TargetDirection.x, TargetDirection.z));
-        }
-
-        //Calculates the Direction(Vector) to Player Forward Right/Left
-        public static Pipliz.Vector3Int GetDirectionRight_Left(Vector3 playerForward, bool right = true)
-        {
-            Vector3 testVector;
-            // testVector will be the "local" player direction intended. It rotates as the player rotates
-
-            if (right)
-                testVector = -Vector3.Cross(playerForward, Vector3.up);
-            else //left
-                testVector = Vector3.Cross(playerForward, Vector3.up);
-
-            float testVectorMax = Math.MaxMagnitude(testVector);
-            // testVectorMax holds either x, y or z from testVector; whichever has the largest absolute value
-            if (testVectorMax == testVector.x)
-            {
-                // so the largest part of the direction is the x-axis
-                if (testVectorMax >= 0f)
-                    return new Pipliz.Vector3Int(1, 0, 0);
-                else
-                    return new Pipliz.Vector3Int(-1, 0, 0);
-            }
-            else
-            {
-                if (testVectorMax >= 0)
-                    return new Pipliz.Vector3Int(0, 0, 1);
-                else
-                    return new Pipliz.Vector3Int(0, 0, -1);
-            }
+            return (int)UnityEngine.Vector3.SignedAngle(new UnityEngine.Vector3(SourceDirection.x, SourceDirection.z), new UnityEngine.Vector3(TargetDirection.x, TargetDirection.z), Vector3.forward);
         }
 
         //Returns the Orientation <player> to
@@ -214,60 +186,46 @@ namespace Compass
         {
             int angle = getAngle(TargetDirection, new Pipliz.Vector3Int(player.Forward));
 
-            if (angle < angles[0] + angleDiff)  // 0 - 20
+            /*
+             * Fuzzy Logic over the angle using angleDiff to define the ranges
+             * angleDiff = 20 ~90/4 in this way each direction is ~45º
+             * 
+             * [-20, 20] FORWARD
+             * ]20, 70[ FORWARD + RIGHT
+             * [70, 110] RIGHT
+             * ]110, 160[ BACKWARD + RIGHT
+             * [160, 180] & [-160, -180] BACKWARD
+             * ]-160, -110[ BACKWARD + LEFT
+             * [-110, -70] LEFT
+             * ]-70, -20[ FORWARD + LEFT
+             * 
+             * IMPORTANT: When sending Left / Right you have to send the opposite one that has been calculate.
+             * If you are looking to the right you have to turn left. When looking back NOT TRANSFORM
+             */
+
+            if (angle >= -angleDiff && angle <= angleDiff)  // [-20,20] = FORWARD
                 return Orientation.Forward;
-            else if (angle >= angles[0] + angleDiff && angle < angles[1] - angleDiff)   // 20 - 70
-            {
-                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
 
-                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
-                    return Orientation.ForwardLeft;
-                else
-                    return Orientation.ForwardRight;
-            }
-            else if (angle >= angles[1] - angleDiff && angle < angles[1] + angleDiff)   // 70 - 110
-            {
-                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
+            if (angle > angles[0] + angleDiff && angle < angles[1] - angleDiff)         //]20, 70[ = FORWARD + RIGHT -> LEFT
+                return Orientation.ForwardLeft;
 
-                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
-                    return Orientation.Left;
-                else
-                    return Orientation.Right;
-            }
-            else if (angle >= angles[1] + angleDiff && angle < angles[2] - angleDiff)   // 110 - 160
-            {
-                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
+            if (angle >= angles[1] - angleDiff && angle <= angles[1] + angleDiff)       //[70, 110] = RIGHT -> LEFT
+                return Orientation.Left;
 
-                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
-                    return Orientation.BackwardLeft;
-                else
-                    return Orientation.BackwardRight;
-            }
-            else if (angle >= angles[2] - angleDiff && angle < angles[2] + angleDiff)   // 160 - 200
+            if (angle > angles[1] + angleDiff && angle < angles[2] - angleDiff)         //]110, 160[ = BACKWARD + RIGHT
+                return Orientation.BackwardRight;
+
+            if (angle >= angles[2] - angleDiff || angle <= -angles[2] + angleDiff)      //[160, 180] && [-180, -160] = BACKWARD
                 return Orientation.Backward;
-            else if (angle >= angles[2] + angleDiff && angle < angles[3] - angleDiff)   // 200 - 250
-            {
-                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
 
-                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
-                    return Orientation.BackwardLeft;
-                else
-                    return Orientation.BackwardRight;
-            }
-            else if (angle >= angles[3] - angleDiff)    // 250 - 360
-            {
-                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
+            if (angle > -angles[2] + angleDiff && angle < -angles[1] - angleDiff)       //]-160, -110[ = BACKWARD + LEFT
+                return Orientation.BackwardLeft;
 
-                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
-                    return Orientation.Left;
-                else
-                    return Orientation.Right;
-            }
+            if (angle >= -angles[1] - angleDiff && angle <= -angles[1] + angleDiff)     //[-110, -70] = LEFT -> RIGHT
+                return Orientation.Right;
+
+            if (angle > -angles[1] + angleDiff && angle < angles[0] - angleDiff)        // ]-70, -20[ = FORWARD + LEFT -> RIGHT
+                return Orientation.ForwardRight;
 
             return Orientation.ERROR;
         }
@@ -284,12 +242,21 @@ namespace Compass
         {
             int x = (int)(player.Forward.x * 100);
             int z = (int)(player.Forward.z * 100);
-            /*
-            Z BETWEEN [80,99] = NORTH & IGNORE X
-            Z BETWEEN [-80,-99] = SOUTH & IGNORE X
 
-            X BETWEEM [80,99] = EAST & IGNORE Z
-            X BETWEEM [-80,-99] = EAST & IGNORE Z
+            /*
+             * Z AXIS:
+             * [80, 100] NORTH
+             * [0, 79] NORTH + X
+             * [-79, 0] SOUTH + X
+             * [100, 80] SOUTH
+             * 
+             * X AXIS:
+             * [80, 100] EAST
+             * [0, 79] EAST + X
+             * [-79, 0] WEST + X
+             * [100, 80] WEST
+             * 
+             * IF pure NORTH/SOUTH/EAST/WEST appears it is not need to check the other axis
              */
 
             if (z > 100 - angleDiff)
