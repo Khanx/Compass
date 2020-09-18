@@ -6,9 +6,60 @@ using UnityEngine;
 
 namespace Compass
 {
+    public enum Orientation
+    {
+        Forward,
+        Right,
+        Backward,
+        Left,
+
+        ForwardRight,
+        ForwardLeft,
+        BackwardRight,
+        BackwardLeft,
+
+        ERROR
+    }
+
+    public enum CompassAction
+    {
+        CardinalDirection,
+        ColonyDirection,
+        //PlayerDeath,    //FUTURE WORK
+        //ColonistDeath,  //FUTURE WORK
+        //WorldMarker     //FUTURE WORK
+    }
+
+    public struct CompassLastAction
+    {
+        public CompassAction action;
+        public Pipliz.Vector3Int position;
+
+        public CompassLastAction(CompassAction action)
+        {
+            this.action = action;
+            this.position = new Pipliz.Vector3Int();
+        }
+
+        public CompassLastAction(CompassAction action, Pipliz.Vector3Int position)
+        {
+            this.action = action;
+            this.position = position;
+        }
+    }
+
     [ModLoader.ModManager]
     public static class CompassT
     {
+        //PlayerID - Colony of the LAST direction
+        public static Dictionary<NetworkID, CompassLastAction> last_Compass_Action = new Dictionary<NetworkID, CompassLastAction>();
+
+        public static readonly int[] angles = new int[] { 0, 90, 180, 270, 360 };
+        public static readonly int angleDiff = 20;  //Diff between angles (Example: 0º = Forward, [0+angleDiff, 90-angleDiff] = Forward + Right)
+
+        //Item Interaction
+        //Left CLick = Show UI
+        //Right Click = Last option selected in the UI. Default: Direction
         [ModLoader.ModCallback(ModLoader.EModCallbackType.OnPlayerClicked, "Khanx.Compass.OnPlayerClicked")]
         public static void OnPlayerClicked(Players.Player player, Shared.PlayerClickedData playerClickedData)
         {
@@ -18,100 +69,123 @@ namespace Compass
             switch (playerClickedData.ClickType)
             {
                 case Shared.PlayerClickedData.EClickType.Left:
-                    Left_Click(player);
+                    CompassUI(player);
                     break;
                 case Shared.PlayerClickedData.EClickType.Right:
-                    Right_Click(player);
+                    RepeatLastAction(player);
                     break;
             };
         }
 
-        public static void Left_Click(Players.Player player)
+        //Last option selected in the UI. Default: Direction
+        public static void RepeatLastAction(Players.Player player)
         {
-            if (player.Colonies.Length == 0)
+            CompassLastAction last_action = last_Compass_Action.GetValueOrDefault(player.ID, new CompassLastAction(CompassAction.CardinalDirection));
+
+            switch (last_action.action)
             {
-                Chatting.Chat.Send(player, "You do not have a colony.");
-                return;
-            }
-            else if (player.Colonies.Length == 1)
-            {
-                Pipliz.Vector3Int colonyDirection = getColonyDirection(0, player);
+                case CompassAction.CardinalDirection:
+                    sendCardinalDirectionToPlayer(player);
+                    break;
 
-                int angle = getAngle(colonyDirection, player);
+                case CompassAction.ColonyDirection:
+                    Orientation orientation = GetOrientationToPositionFromPlayer(player, last_action.position);
 
-                sendDirectionToPlayer(player, angle, colonyDirection);
-            }
-            else
-                selectColonyUI(player);
-        }
-
-        public static Dictionary<NetworkID, int> last_Compass = new Dictionary<NetworkID, int>();
-
-        public static void Right_Click(Players.Player player)
-        {
-            if (player.Colonies.Length == 0)
-            {
-                Chatting.Chat.Send(player, "You do not have a colony.");
-                return;
-            }
-            else if (player.Colonies.Length == 1)
-            {
-                Pipliz.Vector3Int colonyDirection = getColonyDirection(0, player);
-
-                int angle = getAngle(colonyDirection, player);
-
-                sendDirectionToPlayer(player, angle, colonyDirection);
-            }
-            else
-            {
-                Pipliz.Vector3Int colonyDirection = getColonyDirection(last_Compass.GetValueOrDefault(player.ID, 0), player);
-
-                int angle = getAngle(colonyDirection, player);
-
-                sendDirectionToPlayer(player, angle, colonyDirection);
+                    sendOrientationToPlayer(player, orientation);
+                    break;
             }
         }
 
-        public static void selectColonyUI(Players.Player player)
+        //Shows the UI
+        public static void CompassUI(Players.Player player)
         {
             NetworkMenu menu = new NetworkMenu();
             menu.Identifier = "Compass";
+            menu.LocalStorage.SetAs("header", "Compass");
 
-            List<string> colonies = new List<string>();
+            ButtonCallback CardinalButtonCallback = new ButtonCallback("Khanx.Compass.CardinalDirection", new LabelData("Cardinal Direction", UnityEngine.Color.white), -1, 25, ButtonCallback.EOnClickActions.ClosePopup);
+            menu.Items.Add(CardinalButtonCallback);
 
-            foreach (var col in player.Colonies)
-                colonies.Add(col.Name);
+            if (player.Colonies.Length > 0)
+            {
+                EmptySpace Cardinal2Colony = new EmptySpace(25);
+                List<string> colonies = new List<string>();
 
-            DropDown dropDown = new DropDown("Colony", "Khanx.Compass.Colony", colonies);
-            //Default dropdown (ALWAYS INCLUDE OR GIVES ERROR)
-            menu.LocalStorage.SetAs("Khanx.Compass.Colony", 0);
+                foreach (var col in player.Colonies)
+                    colonies.Add(col.Name);
 
-            ButtonCallback buttonCallback = new ButtonCallback("Khanx.Compass.Navigate", new LabelData("Navigate", UnityEngine.Color.black), -1, 25, ButtonCallback.EOnClickActions.ClosePopup);
+                DropDown ColonyDropDown = new DropDown("Colony", "Khanx.Compass.Colony", colonies);
+                //Default dropdown (ALWAYS INCLUDE OR GIVES ERROR)
+                menu.LocalStorage.SetAs("Khanx.Compass.Colony", 0);
 
-            menu.Items.Add(dropDown);
-            menu.Items.Add(buttonCallback);
+                ButtonCallback ColonyButtonCallback = new ButtonCallback("Khanx.Compass.ColonyDirection", new LabelData("Navigate", UnityEngine.Color.white), -1, 25, ButtonCallback.EOnClickActions.ClosePopup);
+
+                menu.Items.Add(Cardinal2Colony);
+                menu.Items.Add(ColonyDropDown);
+                menu.Items.Add(ColonyButtonCallback);
+            }
 
             NetworkMenuManager.SendServerPopup(player, menu);
         }
 
-
-        public static Pipliz.Vector3Int getColonyDirection(int colonyInt, Players.Player player)
+        //Button behavior
+        [ModLoader.ModCallback(ModLoader.EModCallbackType.OnPlayerPushedNetworkUIButton, "Khanx.Compass.OnPlayerPushedNetworkUIButton")]
+        public static void OnPlayerPushedNetworkUIButton(ButtonPressCallbackData data)
         {
-            return (player.Colonies[colonyInt].GetClosestBanner(new Pipliz.Vector3Int(player.Position)).Position - new Pipliz.Vector3Int(player.Position));
+            if (data.ButtonIdentifier.Equals("Khanx.Compass.CardinalDirection"))
+            {
+                sendCardinalDirectionToPlayer(data.Player);
+
+                if (last_Compass_Action.ContainsKey(data.Player.ID))
+                    last_Compass_Action.Remove(data.Player.ID);
+
+                last_Compass_Action.Add(data.Player.ID, new CompassLastAction(CompassAction.CardinalDirection));
+                return;
+            }
+
+            if (data.ButtonIdentifier.Equals("Khanx.Compass.ColonyDirection"))
+            {
+                int colonyInt = data.Storage.GetAs<int>("Khanx.Compass.Colony");
+
+                Pipliz.Vector3Int colonyPosition = getColonyPosition(colonyInt, data.Player);
+                Orientation orientation = GetOrientationToPositionFromPlayer(data.Player, colonyPosition);
+
+                sendOrientationToPlayer(data.Player, orientation);
+
+
+                if (last_Compass_Action.ContainsKey(data.Player.ID))
+                    last_Compass_Action.Remove(data.Player.ID);
+
+                last_Compass_Action.Add(data.Player.ID, new CompassLastAction(CompassAction.ColonyDirection, colonyPosition));
+                return;
+            }
         }
 
-        public static int getAngle(Pipliz.Vector3Int colonyDirection, Players.Player player)
+        //Returns the Position of the Colony <player>.Colonies[<colonyInt>] (comes from the UI)
+        public static Pipliz.Vector3Int getColonyPosition(int colonyInt, Players.Player player)
         {
-            //return angle;
-            return (int)UnityEngine.Vector3.Angle(new UnityEngine.Vector3(player.Forward.x, player.Forward.z), new UnityEngine.Vector3(colonyDirection.x, colonyDirection.z));
+            return (player.Colonies[colonyInt].GetClosestBanner(new Pipliz.Vector3Int(player.Position)).Position);
         }
 
-        public static Pipliz.Vector3Int GetDirection(Vector3 playerForward, bool right = true)
+        //Returns the Direction(vector) between the <TargetPosition> and <SourcePosition>
+        public static Pipliz.Vector3Int getDirection(Pipliz.Vector3Int TargetPosition, Pipliz.Vector3Int SourcePosition)
+        {
+            return TargetPosition - SourcePosition;
+        }
+
+        //Return the angle (degrees º) between Target(Vector) and Source(Vector) WITHOUT considering the Y AXIS
+        public static int getAngle(Pipliz.Vector3Int TargetDirection, Pipliz.Vector3Int SourceDirection)
+        {
+            return (int)UnityEngine.Vector3.Angle(new UnityEngine.Vector3(SourceDirection.x, SourceDirection.z), new UnityEngine.Vector3(TargetDirection.x, TargetDirection.z));
+        }
+
+        //Calculates the Direction(Vector) to Player Forward Right/Left
+        public static Pipliz.Vector3Int GetDirectionRight_Left(Vector3 playerForward, bool right = true)
         {
             Vector3 testVector;
             // testVector will be the "local" player direction intended. It rotates as the player rotates
 
-            if(right)
+            if (right)
                 testVector = -Vector3.Cross(playerForward, Vector3.up);
             else //left
                 testVector = Vector3.Cross(playerForward, Vector3.up);
@@ -135,88 +209,172 @@ namespace Compass
             }
         }
 
-        public static readonly int[] angles = new int[] {0, 90, 180, 270, 360};
-        public static readonly int angleDiff = 20;
-
-        public static void sendDirectionToPlayer(Players.Player player, int angle, Pipliz.Vector3Int colonyDirection)
+        //Returns the Orientation <player> to
+        public static Orientation GetOrientationToDirectionFromPlayer(Players.Player player, Pipliz.Vector3Int TargetDirection)
         {
-            //Chatting.Chat.Send(data.Player, "Angle: " + angle);
+            int angle = getAngle(TargetDirection, new Pipliz.Vector3Int(player.Forward));
 
             if (angle < angles[0] + angleDiff)  // 0 - 20
-                Chatting.Chat.Send(player, "Forward");
+                return Orientation.Forward;
             else if (angle >= angles[0] + angleDiff && angle < angles[1] - angleDiff)   // 20 - 70
             {
-                Pipliz.Vector3Int l = GetDirection(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirection(player.Forward, true) * 10;
+                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
+                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
 
-                if (Pipliz.Math.ManhattanDistance(colonyDirection, l) < Pipliz.Math.ManhattanDistance(colonyDirection, r))
-                    Chatting.Chat.Send(player, "Forward & Left");
+                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
+                    return Orientation.ForwardLeft;
                 else
-                    Chatting.Chat.Send(player, "Forward & Right");
+                    return Orientation.ForwardRight;
             }
             else if (angle >= angles[1] - angleDiff && angle < angles[1] + angleDiff)   // 70 - 110
             {
-                Pipliz.Vector3Int l = GetDirection(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirection(player.Forward, true) * 10;
+                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
+                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
 
-                if (Pipliz.Math.ManhattanDistance(colonyDirection, l) < Pipliz.Math.ManhattanDistance(colonyDirection, r))
-                    Chatting.Chat.Send(player, "Left");
+                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
+                    return Orientation.Left;
                 else
-                    Chatting.Chat.Send(player, "Right");
+                    return Orientation.Right;
             }
             else if (angle >= angles[1] + angleDiff && angle < angles[2] - angleDiff)   // 110 - 160
             {
-                Pipliz.Vector3Int l = GetDirection(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirection(player.Forward, true) * 10;
+                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
+                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
 
-                if (Pipliz.Math.ManhattanDistance(colonyDirection, l) < Pipliz.Math.ManhattanDistance(colonyDirection, r))
-                    Chatting.Chat.Send(player, "Backward & Left");
+                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
+                    return Orientation.BackwardLeft;
                 else
-                    Chatting.Chat.Send(player, "Backward & Right");
+                    return Orientation.BackwardRight;
             }
             else if (angle >= angles[2] - angleDiff && angle < angles[2] + angleDiff)   // 160 - 200
-                Chatting.Chat.Send(player, "Backward");
+                return Orientation.Backward;
             else if (angle >= angles[2] + angleDiff && angle < angles[3] - angleDiff)   // 200 - 250
             {
-                Pipliz.Vector3Int l = GetDirection(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirection(player.Forward, true) * 10;
+                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
+                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
 
-                if (Pipliz.Math.ManhattanDistance(colonyDirection, l) < Pipliz.Math.ManhattanDistance(colonyDirection, r))
-                    Chatting.Chat.Send(player, "Backward & Left");
+                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
+                    return Orientation.BackwardLeft;
                 else
-                    Chatting.Chat.Send(player, "Backward & Right");
+                    return Orientation.BackwardRight;
             }
             else if (angle >= angles[3] - angleDiff)    // 250 - 360
             {
-                Pipliz.Vector3Int l = GetDirection(player.Forward, false) * 10;
-                Pipliz.Vector3Int r = GetDirection(player.Forward, true) * 10;
+                Pipliz.Vector3Int l = GetDirectionRight_Left(player.Forward, false) * 10;
+                Pipliz.Vector3Int r = GetDirectionRight_Left(player.Forward, true) * 10;
 
-                if (Pipliz.Math.ManhattanDistance(colonyDirection, l) < Pipliz.Math.ManhattanDistance(colonyDirection, r))
-                    Chatting.Chat.Send(player, "Left");
+                if (Pipliz.Math.ManhattanDistance(TargetDirection, l) < Pipliz.Math.ManhattanDistance(TargetDirection, r))
+                    return Orientation.Left;
                 else
-                    Chatting.Chat.Send(player, "Right");
+                    return Orientation.Right;
             }
 
+            return Orientation.ERROR;
         }
 
-        [ModLoader.ModCallback(ModLoader.EModCallbackType.OnPlayerPushedNetworkUIButton, "Khanx.Compass.OnPlayerPushedNetworkUIButton")]
-        public static void OnPlayerPushedNetworkUIButton(ButtonPressCallbackData data)
+        public static Orientation GetOrientationToPositionFromPlayer(Players.Player player, Pipliz.Vector3Int TargetPosition)
         {
-            if (!data.ButtonIdentifier.Equals("Khanx.Compass.Navigate"))
+            Pipliz.Vector3Int TargetDirection = getDirection(TargetPosition, new Pipliz.Vector3Int(player.Position));
+
+            return GetOrientationToDirectionFromPlayer(player, TargetDirection);
+        }
+
+        //Sends to the player the cardinal direction he is looking at
+        public static void sendCardinalDirectionToPlayer(Players.Player player)
+        {
+            int x = (int)(player.Forward.x * 100);
+            int z = (int)(player.Forward.z * 100);
+            /*
+            Z BETWEEN [80,99] = NORTH & IGNORE X
+            Z BETWEEN [-80,-99] = SOUTH & IGNORE X
+
+            X BETWEEM [80,99] = EAST & IGNORE Z
+            X BETWEEM [-80,-99] = EAST & IGNORE Z
+             */
+
+            if (z > 100 - angleDiff)
+            {
+                Chatting.Chat.Send(player, "North");
                 return;
+            }
+            else if (-z > 100 - angleDiff)
+            {
+                Chatting.Chat.Send(player, "South");
+                return;
+            }
+            else if (x > 100 - angleDiff)
+            {
+                Chatting.Chat.Send(player, "East");
+                return;
+            }
+            else if (-x > 100 - angleDiff)
+            {
+                Chatting.Chat.Send(player, "West");
+                return;
+            }
 
-            int colonyInt = data.Storage.GetAs<int>("Khanx.Compass.Colony");
+            if (z > 0) //NORTH
+            {
+                if (x > 0) //East
+                {
+                    Chatting.Chat.Send(player, "North & East");
+                    return;
+                }
+                else //West
+                {
+                    Chatting.Chat.Send(player, "North & West");
+                    return;
+                }
+            }
+            else //South
+            {
+                if (x > 0) //East
+                {
+                    Chatting.Chat.Send(player, "South & East");
+                    return;
+                }
+                else //West
+                {
+                    Chatting.Chat.Send(player, "South & West");
+                    return;
+                }
+            }
+        }
 
-            if (last_Compass.ContainsKey(data.Player.ID))
-                last_Compass.Remove(data.Player.ID);
+        //Sends the Orientation X to the player
+        public static void sendOrientationToPlayer(Players.Player player, Orientation orientation)
+        {
+            switch (orientation)
+            {
+                case Orientation.Forward:
+                    Chatting.Chat.Send(player, "Forward");
+                    break;
+                case Orientation.Right:
+                    Chatting.Chat.Send(player, "Right");
+                    break;
+                case Orientation.Backward:
+                    Chatting.Chat.Send(player, "Backward");
+                    break;
+                case Orientation.Left:
+                    Chatting.Chat.Send(player, "Left");
+                    break;
+                case Orientation.ForwardRight:
+                    Chatting.Chat.Send(player, "Forward & Right");
+                    break;
+                case Orientation.ForwardLeft:
+                    Chatting.Chat.Send(player, "Forward & Left");
+                    break;
+                case Orientation.BackwardRight:
+                    Chatting.Chat.Send(player, "Backward & Right");
+                    break;
+                case Orientation.BackwardLeft:
+                    Chatting.Chat.Send(player, "Backward & Left");
+                    break;
 
-            last_Compass.Add(data.Player.ID, colonyInt);
-
-            Pipliz.Vector3Int colonyDirection = getColonyDirection(colonyInt, data.Player);
-
-            int angle = getAngle(colonyDirection, data.Player);
-
-            sendDirectionToPlayer(data.Player, angle, colonyDirection);
+                case Orientation.ERROR:
+                    Chatting.Chat.Send(player, "Something went wrong, please contact with the author of this mod");
+                    break;
+            }
         }
     }
 }
