@@ -51,15 +51,21 @@ namespace Compass
     [ModLoader.ModManager]
     public static class CompassT
     {
-        //PlayerID - Colony of the LAST direction
+        /// <summary>
+        /// PlayerID - Last action selected
+        /// </summary>
         public static Dictionary<NetworkID, CompassLastAction> last_Compass_Action = new Dictionary<NetworkID, CompassLastAction>();
 
         public static readonly int[] angles = new int[] { 0, 90, 180 };  //The result of the Unity's method to calculate the angle is never greater than 180
         public static readonly int angleDiff = 20;  //Diff between angles ~90/4. Example of use: Forward = [-angleDiff, angleDiff]
 
-        //Item Interaction
-        //Left CLick = Show UI
-        //Right Click = Last option selected in the UI. Default: Direction
+        /// <summary>
+        /// Interaction with the Compass (item)
+        /// Left Click = Show UI
+        /// Right Click = Last option selected, default: Cardinal Direction
+        /// </summary>
+        /// <param name="player"></param>
+        /// <param name="playerClickedData"></param>
         [ModLoader.ModCallback(ModLoader.EModCallbackType.OnPlayerClicked, "Khanx.Compass.OnPlayerClicked")]
         public static void OnPlayerClicked(Players.Player player, Shared.PlayerClickedData playerClickedData)
         {
@@ -77,7 +83,10 @@ namespace Compass
             };
         }
 
-        //Last option selected in the UI. Default: Direction
+        /// <summary>
+        /// Repeat the last action selected in the UI. Default Cardinal Direction
+        /// </summary>
+        /// <param name="player"></param>
         public static void RepeatLastAction(Players.Player player)
         {
             CompassLastAction last_action = last_Compass_Action.GetValueOrDefault(player.ID, new CompassLastAction(CompassAction.CardinalDirection));
@@ -85,18 +94,21 @@ namespace Compass
             switch (last_action.action)
             {
                 case CompassAction.CardinalDirection:
-                    sendCardinalDirectionToPlayer(player);
+                    SendCardinalDirectionToPlayer(player);
                     break;
 
                 case CompassAction.ColonyDirection:
                     Orientation orientation = GetOrientationToPositionFromPlayer(player, last_action.position);
 
-                    sendOrientationToPlayer(player, orientation);
+                    SendOrientationToPlayer(player, orientation);
                     break;
             }
         }
 
-        //Shows the UI
+        /// <summary>
+        /// Shows the UI
+        /// </summary>
+        /// <param name="player"></param>
         public static void CompassUI(Players.Player player)
         {
             NetworkMenu menu = new NetworkMenu();
@@ -134,7 +146,7 @@ namespace Compass
         {
             if (data.ButtonIdentifier.Equals("Khanx.Compass.CardinalDirection"))
             {
-                sendCardinalDirectionToPlayer(data.Player);
+                SendCardinalDirectionToPlayer(data.Player);
 
                 if (last_Compass_Action.ContainsKey(data.Player.ID))
                     last_Compass_Action.Remove(data.Player.ID);
@@ -147,10 +159,10 @@ namespace Compass
             {
                 int colonyInt = data.Storage.GetAs<int>("Khanx.Compass.Colony");
 
-                Pipliz.Vector3Int colonyPosition = getColonyPosition(colonyInt, data.Player);
+                Pipliz.Vector3Int colonyPosition = GetColonyPosition(colonyInt, data.Player);
                 Orientation orientation = GetOrientationToPositionFromPlayer(data.Player, colonyPosition);
 
-                sendOrientationToPlayer(data.Player, orientation);
+                SendOrientationToPlayer(data.Player, orientation);
 
 
                 if (last_Compass_Action.ContainsKey(data.Player.ID))
@@ -161,30 +173,51 @@ namespace Compass
             }
         }
 
-        //Returns the Position of the Colony <player>.Colonies[<colonyInt>] (comes from the UI)
-        public static Pipliz.Vector3Int getColonyPosition(int colonyInt, Players.Player player)
+        /// <summary>
+        /// Returns the Position of the Colony <player>.Colonies[<colonyInt>] (comes from the UI)
+        /// </summary>
+        /// <param name="colonyInt"></param>
+        /// <param name="player"></param>
+        /// <returns></returns>
+        public static Pipliz.Vector3Int GetColonyPosition(int colonyInt, Players.Player player)
         {
             return (player.Colonies[colonyInt].GetClosestBanner(new Pipliz.Vector3Int(player.Position)).Position);
         }
 
-        //Returns the Direction(vector) between the <TargetPosition> and <SourcePosition>
-        public static Pipliz.Vector3Int getDirection(Pipliz.Vector3Int TargetPosition, Pipliz.Vector3Int SourcePosition)
+        /// <summary>
+        /// Returns the Direction(vector) between the TargetPosition and SourcePosition
+        /// </summary>
+        /// <param name="TargetPosition"></param>
+        /// <param name="SourcePosition"></param>
+        /// <returns></returns>
+        public static Pipliz.Vector3Int GetDirection(Pipliz.Vector3Int TargetPosition, Pipliz.Vector3Int SourcePosition)
         {
             return TargetPosition - SourcePosition;
         }
 
-        //Return the angle (degrees º) between Target(Vector) and Source(Vector) WITHOUT considering the Y AXIS
-        // The result is between [-180, 180]
-        // Positive in a clockwise direction and negative in an anti-clockwise direction.
-        public static int getAngle(Pipliz.Vector3Int TargetDirection, Pipliz.Vector3Int SourceDirection)
+        /// <summary>
+        /// Return the angle (degrees º) between Target (Vector) and Source (Vector) WITHOUT considering the Y AXIS
+        /// The result is between [-180, 180]
+        /// Positive in a clockwise direction and negative in an anti-clockwise direction.
+        /// </summary>
+        /// <param name="TargetDirection"></param>
+        /// <param name="SourceDirection"></param>
+        /// <returns></returns>
+        public static int GetAngle(Pipliz.Vector3Int TargetDirection, Pipliz.Vector3Int SourceDirection)
         {
             return (int)UnityEngine.Vector3.SignedAngle(new UnityEngine.Vector3(SourceDirection.x, SourceDirection.z), new UnityEngine.Vector3(TargetDirection.x, TargetDirection.z), Vector3.forward);
         }
 
-        //Returns the Orientation <player> to
+        // Returns the Orientation <player> to
+        /// <summary>
+        /// Returns the relative orientation of the player to the target DIRECTION (vector)
+        /// </summary>
+        /// <param name="player"></param>
+        /// <param name="TargetDirection"></param>
+        /// <returns></returns>
         public static Orientation GetOrientationToDirectionFromPlayer(Players.Player player, Pipliz.Vector3Int TargetDirection)
         {
-            int angle = getAngle(TargetDirection, new Pipliz.Vector3Int(player.Forward));
+            int angle = GetAngle(TargetDirection, new Pipliz.Vector3Int(player.Forward));
 
             /*
              * Fuzzy Logic over the angle using angleDiff to define the ranges
@@ -230,15 +263,24 @@ namespace Compass
             return Orientation.ERROR;
         }
 
+        /// <summary>
+        /// Returns the relative orientation of the player to the target POSITION (location)
+        /// </summary>
+        /// <param name="player"></param>
+        /// <param name="TargetDirection"></param>
+        /// <returns></returns>
         public static Orientation GetOrientationToPositionFromPlayer(Players.Player player, Pipliz.Vector3Int TargetPosition)
         {
-            Pipliz.Vector3Int TargetDirection = getDirection(TargetPosition, new Pipliz.Vector3Int(player.Position));
+            Pipliz.Vector3Int TargetDirection = GetDirection(TargetPosition, new Pipliz.Vector3Int(player.Position));
 
             return GetOrientationToDirectionFromPlayer(player, TargetDirection);
         }
 
-        //Sends to the player the cardinal direction he is looking at
-        public static void sendCardinalDirectionToPlayer(Players.Player player)
+        /// <summary>
+        /// Sends to the player the cardinal direction which he is looking at
+        /// </summary>
+        /// <param name="player"></param>
+        private static void SendCardinalDirectionToPlayer(Players.Player player)
         {
             int x = (int)(player.Forward.x * 100);
             int z = (int)(player.Forward.z * 100);
@@ -308,8 +350,12 @@ namespace Compass
             }
         }
 
-        //Sends the Orientation X to the player
-        public static void sendOrientationToPlayer(Players.Player player, Orientation orientation)
+        /// <summary>
+        /// Sends the Orientation X to the player
+        /// </summary>
+        /// <param name="player"></param>
+        /// <param name="orientation"></param>
+        private static void SendOrientationToPlayer(Players.Player player, Orientation orientation)
         {
             switch (orientation)
             {
