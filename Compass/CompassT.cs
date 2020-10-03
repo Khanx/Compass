@@ -2,25 +2,9 @@
 using NetworkUI.Items;
 using Pipliz;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace Compass
 {
-    public enum Orientation
-    {
-        Forward,
-        Right,
-        Backward,
-        Left,
-
-        ForwardRight,
-        ForwardLeft,
-        BackwardRight,
-        BackwardLeft,
-
-        ERROR
-    }
-
     public enum CompassAction
     {
         CardinalDirection,
@@ -55,9 +39,6 @@ namespace Compass
         /// PlayerID - Last action selected
         /// </summary>
         public static Dictionary<NetworkID, CompassLastAction> last_Compass_Action = new Dictionary<NetworkID, CompassLastAction>();
-
-        public static readonly int[] angles = new int[] { 0, 90, 180 };  //The result of the Unity's method to calculate the angle is never greater than 180
-        public static readonly int angleDiff = 20;  //Diff between angles ~90/4. Example of use: Forward = [-angleDiff, angleDiff]
 
         /// <summary>
         /// Interaction with the Compass (item)
@@ -98,7 +79,7 @@ namespace Compass
                     break;
 
                 case CompassAction.ColonyDirection:
-                    Orientation orientation = GetOrientationToPositionFromPlayer(player, last_action.position);
+                    Orientation orientation = Helper.GetOrientationToPositionFromPlayer(player, last_action.position);
 
                     SendOrientationToPlayer(player, orientation);
                     break;
@@ -160,7 +141,7 @@ namespace Compass
                 int colonyInt = data.Storage.GetAs<int>("Khanx.Compass.Colony");
 
                 Pipliz.Vector3Int colonyPosition = GetColonyPosition(colonyInt, data.Player);
-                Orientation orientation = GetOrientationToPositionFromPlayer(data.Player, colonyPosition);
+                Orientation orientation = Helper.GetOrientationToPositionFromPlayer(data.Player, colonyPosition);
 
                 SendOrientationToPlayer(data.Player, orientation);
 
@@ -185,168 +166,44 @@ namespace Compass
         }
 
         /// <summary>
-        /// Returns the Direction(vector) between the TargetPosition and SourcePosition
-        /// </summary>
-        /// <param name="TargetPosition"></param>
-        /// <param name="SourcePosition"></param>
-        /// <returns></returns>
-        public static Pipliz.Vector3Int GetDirection(Pipliz.Vector3Int TargetPosition, Pipliz.Vector3Int SourcePosition)
-        {
-            return TargetPosition - SourcePosition;
-        }
-
-        /// <summary>
-        /// Return the angle (degrees º) between Target (Vector) and Source (Vector) WITHOUT considering the Y AXIS
-        /// The result is between [-180, 180]
-        /// Positive in a clockwise direction and negative in an anti-clockwise direction.
-        /// </summary>
-        /// <param name="TargetDirection"></param>
-        /// <param name="SourceDirection"></param>
-        /// <returns></returns>
-        public static int GetAngle(Pipliz.Vector3Int TargetDirection, Pipliz.Vector3Int SourceDirection)
-        {
-            return (int)UnityEngine.Vector3.SignedAngle(new UnityEngine.Vector3(SourceDirection.x, SourceDirection.z), new UnityEngine.Vector3(TargetDirection.x, TargetDirection.z), Vector3.forward);
-        }
-
-        // Returns the Orientation <player> to
-        /// <summary>
-        /// Returns the relative orientation of the player to the target DIRECTION (vector)
-        /// </summary>
-        /// <param name="player"></param>
-        /// <param name="TargetDirection"></param>
-        /// <returns></returns>
-        public static Orientation GetOrientationToDirectionFromPlayer(Players.Player player, Pipliz.Vector3Int TargetDirection)
-        {
-            int angle = GetAngle(TargetDirection, new Pipliz.Vector3Int(player.Forward));
-
-            /*
-             * Fuzzy Logic over the angle using angleDiff to define the ranges
-             * angleDiff = 20 ~90/4 in this way each direction is ~45º
-             * 
-             * [-20, 20] FORWARD
-             * ]20, 70[ FORWARD + RIGHT
-             * [70, 110] RIGHT
-             * ]110, 160[ BACKWARD + RIGHT
-             * [160, 180] & [-160, -180] BACKWARD
-             * ]-160, -110[ BACKWARD + LEFT
-             * [-110, -70] LEFT
-             * ]-70, -20[ FORWARD + LEFT
-             * 
-             * IMPORTANT: When sending Left / Right you have to send the opposite one that has been calculate.
-             * If you are looking to the right you have to turn left. When looking back NOT TRANSFORM
-             */
-
-            if (angle >= -angleDiff && angle <= angleDiff)  // [-20,20] = FORWARD
-                return Orientation.Forward;
-
-            if (angle > angles[0] + angleDiff && angle < angles[1] - angleDiff)         //]20, 70[ = FORWARD + RIGHT -> LEFT
-                return Orientation.ForwardLeft;
-
-            if (angle >= angles[1] - angleDiff && angle <= angles[1] + angleDiff)       //[70, 110] = RIGHT -> LEFT
-                return Orientation.Left;
-
-            if (angle > angles[1] + angleDiff && angle < angles[2] - angleDiff)         //]110, 160[ = BACKWARD + RIGHT
-                return Orientation.BackwardRight;
-
-            if (angle >= angles[2] - angleDiff || angle <= -angles[2] + angleDiff)      //[160, 180] && [-180, -160] = BACKWARD
-                return Orientation.Backward;
-
-            if (angle > -angles[2] + angleDiff && angle < -angles[1] - angleDiff)       //]-160, -110[ = BACKWARD + LEFT
-                return Orientation.BackwardLeft;
-
-            if (angle >= -angles[1] - angleDiff && angle <= -angles[1] + angleDiff)     //[-110, -70] = LEFT -> RIGHT
-                return Orientation.Right;
-
-            if (angle > -angles[1] + angleDiff && angle < angles[0] - angleDiff)        // ]-70, -20[ = FORWARD + LEFT -> RIGHT
-                return Orientation.ForwardRight;
-
-            return Orientation.ERROR;
-        }
-
-        /// <summary>
-        /// Returns the relative orientation of the player to the target POSITION (location)
-        /// </summary>
-        /// <param name="player"></param>
-        /// <param name="TargetDirection"></param>
-        /// <returns></returns>
-        public static Orientation GetOrientationToPositionFromPlayer(Players.Player player, Pipliz.Vector3Int TargetPosition)
-        {
-            Pipliz.Vector3Int TargetDirection = GetDirection(TargetPosition, new Pipliz.Vector3Int(player.Position));
-
-            return GetOrientationToDirectionFromPlayer(player, TargetDirection);
-        }
-
-        /// <summary>
         /// Sends to the player the cardinal direction which he is looking at
         /// </summary>
         /// <param name="player"></param>
         private static void SendCardinalDirectionToPlayer(Players.Player player)
         {
-            int x = (int)(player.Forward.x * 100);
-            int z = (int)(player.Forward.z * 100);
+            //Calculate the orientation to the NORTH and based on the orientation it says the cardinal direction
 
-            /*
-             * Z AXIS:
-             * [80, 100] NORTH
-             * [0, 79] NORTH + X
-             * [-79, 0] SOUTH + X
-             * [100, 80] SOUTH
-             * 
-             * X AXIS:
-             * [80, 100] EAST
-             * [0, 79] EAST + X
-             * [-79, 0] WEST + X
-             * [100, 80] WEST
-             * 
-             * IF pure NORTH/SOUTH/EAST/WEST appears it is not need to check the other axis
-             */
+            Orientation orientation = Helper.GetOrientationToDirectionFromPlayer(player, new Vector3Int(0, 0, 5));
 
-            if (z > 100 - angleDiff)
+            switch (orientation)
             {
-                Chatting.Chat.Send(player, "North");
-                return;
-            }
-            else if (-z > 100 - angleDiff)
-            {
-                Chatting.Chat.Send(player, "South");
-                return;
-            }
-            else if (x > 100 - angleDiff)
-            {
-                Chatting.Chat.Send(player, "East");
-                return;
-            }
-            else if (-x > 100 - angleDiff)
-            {
-                Chatting.Chat.Send(player, "West");
-                return;
-            }
-
-            if (z > 0) //NORTH
-            {
-                if (x > 0) //East
-                {
-                    Chatting.Chat.Send(player, "North & East");
-                    return;
-                }
-                else //West
-                {
+                case Orientation.Forward:
+                    Chatting.Chat.Send(player, "North");
+                    break;
+                case Orientation.Right:
+                    Chatting.Chat.Send(player, "West");
+                    break;
+                case Orientation.Backward:
+                    Chatting.Chat.Send(player, "South");
+                    break;
+                case Orientation.Left:
+                    Chatting.Chat.Send(player, "East");
+                    break;
+                case Orientation.ForwardRight:
                     Chatting.Chat.Send(player, "North & West");
-                    return;
-                }
-            }
-            else //South
-            {
-                if (x > 0) //East
-                {
+                    break;
+                case Orientation.ForwardLeft:
+                    Chatting.Chat.Send(player, "North & East");
+                    break;
+                case Orientation.BackwardRight:
                     Chatting.Chat.Send(player, "South & East");
-                    return;
-                }
-                else //West
-                {
+                    break;
+                case Orientation.BackwardLeft:
                     Chatting.Chat.Send(player, "South & West");
-                    return;
-                }
+                    break;
+                case Orientation.ERROR:
+                    Chatting.Chat.Send(player, "Something went wrong, please contant with the author of the mod");
+                    break;
             }
         }
 
