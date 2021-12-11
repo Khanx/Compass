@@ -77,8 +77,11 @@ namespace Compass
             if (colony == null)
                 return;
 
-            foreach (var owner in colony.Owners)
+
+            for(int i=0;i<colony.Owners.Count;i++)
             {
+                var owner = colony.Owners[i];
+
                 if (owner.ConnectionState != Players.EConnectionState.Connected)
                     continue;
 

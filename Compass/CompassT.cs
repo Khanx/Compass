@@ -111,9 +111,15 @@ namespace Compass
 
             List<string> colonies = new List<string>();
 
-            if (player.Colonies.Length > 0)
-                foreach (var col in player.Colonies)
+            if (player.Colonies.Count > 0)
+            {
+                for(int i=0;i<player.Colonies.Count;i++)
+                {
+                    var col = player.Colonies[i];
+
                     colonies.Add(col.Name);
+                }
+            }
             else
                 colonies.Add("-");
 
@@ -127,10 +133,10 @@ namespace Compass
 
 
             ButtonCallback ColonyButtonCallback = new ButtonCallback("Khanx.Compass.ColonyDirection",
-                                                                     new LabelData("Find colony", (player.Colonies.Length > 0) ? UnityEngine.Color.white : UnityEngine.Color.black),
+                                                                     new LabelData("Find colony", (player.Colonies.Count > 0) ? UnityEngine.Color.white : UnityEngine.Color.black),
                                                                      200,
                                                                      30,
-                                                                     (player.Colonies.Length > 0) ? ButtonCallback.EOnClickActions.ClosePopup : ButtonCallback.EOnClickActions.None);
+                                                                     (player.Colonies.Count > 0) ? ButtonCallback.EOnClickActions.ClosePopup : ButtonCallback.EOnClickActions.None);
 
 
             CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(player.ID, null);
@@ -243,7 +249,7 @@ namespace Compass
                 UIManager.AddorUpdateWorldMarker("Khanx.Compass.Goal" + data.Player.Name,
                     (data.Player.Name.Substring(data.Player.Name.Length-1).Equals("s")) ? data.Player.Name+"' tomb" : data.Player.Name + "'s tomb",
                     compassWaypoints.playerDeath,
-                    "Khanx.Compass",
+                    ItemTypes.GetType("Khanx.Compass").Icon,
                     ToggleType.ItemSelected,
                     "Khanx.Compass",
                     data.Player);
@@ -269,7 +275,7 @@ namespace Compass
                 UIManager.AddorUpdateWorldMarker("Khanx.Compass.Goal" + data.Player.Name,
                     "Colonist Death",
                     compassWaypoints.colonistDeath,
-                    "Khanx.Compass",
+                    ItemTypes.GetType("Khanx.Compass").Icon,
                     ToggleType.ItemSelected,
                     "Khanx.Compass",
                      data.Player);
@@ -284,7 +290,7 @@ namespace Compass
             
             if (data.ButtonIdentifier.Equals("Khanx.Compass.ColonyDirection"))
             {
-                int colonyInt = data.Storage.GetAs<int>("Khanx.Compass.Colony");
+                int colonyInt = data.Storage.GetAsOrDefault<int>("Khanx.Compass.Colony", 0);
 
                 Pipliz.Vector3Int colonyPosition = GetColonyPosition(colonyInt, data.Player);
                 Orientation orientation = Helper.GetOrientationToPositionFromPlayer(data.Player, colonyPosition);
@@ -294,7 +300,7 @@ namespace Compass
                 UIManager.AddorUpdateWorldMarker("Khanx.Compass.Goal" + data.Player.Name,
                     data.Player.Colonies[colonyInt].Name,
                     colonyPosition,
-                    "Khanx.Compass",
+                    ItemTypes.GetType("Khanx.Compass").Icon,
                     ToggleType.ItemSelected,
                     "Khanx.Compass",
                      data.Player);
@@ -308,7 +314,7 @@ namespace Compass
 
             if (data.ButtonIdentifier.Equals("Khanx.Compass.WaypointDirection"))
             {
-                int waypointInt = data.Storage.GetAs<int>("Khanx.Compass.Waypoint");
+                int waypointInt = data.Storage.GetAsOrDefault<int>("Khanx.Compass.Waypoint", 0);
 
                 CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID, null);
 
@@ -325,7 +331,7 @@ namespace Compass
                 UIManager.AddorUpdateWorldMarker("Khanx.Compass.Goal" + data.Player.Name,
                     compassWaypoints.waypoints[waypointInt].name,
                     compassWaypoints.waypoints[waypointInt].position,
-                    "Khanx.Compass",
+                    ItemTypes.GetType("Khanx.Compass").Icon,
                     ToggleType.ItemSelected,
                     "Khanx.Compass",
                      data.Player);
@@ -366,7 +372,7 @@ namespace Compass
 
             if (data.ButtonIdentifier.Equals("Khanx.Compass.WaypointAdd"))
             {
-                string waypointName = data.Storage.GetAs<string>("Khanx.Compass.waypointName");
+                string waypointName = data.Storage.GetAsOrDefault<string>("Khanx.Compass.waypointName", "Waypoint");
 
                 if(waypointName.Equals(""))
                 {
@@ -389,7 +395,7 @@ namespace Compass
 
             if (data.ButtonIdentifier.Equals("Khanx.Compass.WaypointRemove"))
             {
-                int waypointInt = data.Storage.GetAs<int>("Khanx.Compass.Waypoint");
+                int waypointInt = data.Storage.GetAsOrDefault<int>("Khanx.Compass.Waypoint", 0);
 
                 CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID, null);
 
