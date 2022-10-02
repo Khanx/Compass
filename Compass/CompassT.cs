@@ -40,7 +40,7 @@ namespace Compass
         /// <summary>
         /// PlayerID - Last action selected
         /// </summary>
-        public static Dictionary<NetworkID, CompassLastAction> last_Compass_Action = new Dictionary<NetworkID, CompassLastAction>();
+        public static Dictionary<Players.PlayerID, CompassLastAction> last_Compass_Action = new Dictionary<Players.PlayerID, CompassLastAction>();
 
         /// <summary>
         /// Interaction with the Compass (item)
@@ -111,11 +111,11 @@ namespace Compass
 
             List<string> colonies = new List<string>();
 
-            if (player.Colonies.Count > 0)
+            if (player.ColonyGroups.Count > 0)
             {
-                for(int i=0;i<player.Colonies.Count;i++)
+                for(int i=0;i<player.ColonyGroups.Count;i++)
                 {
-                    var col = player.Colonies[i];
+                    var col = player.ColonyGroups[i];
 
                     colonies.Add(col.Name);
                 }
@@ -133,13 +133,13 @@ namespace Compass
 
 
             ButtonCallback ColonyButtonCallback = new ButtonCallback("Khanx.Compass.ColonyDirection",
-                                                                     new LabelData("Find colony", (player.Colonies.Count > 0) ? UnityEngine.Color.white : UnityEngine.Color.black),
+                                                                     new LabelData("Find colony", (player.ColonyGroups.Count > 0) ? UnityEngine.Color.white : UnityEngine.Color.black),
                                                                      200,
                                                                      30,
-                                                                     (player.Colonies.Count > 0) ? ButtonCallback.EOnClickActions.ClosePopup : ButtonCallback.EOnClickActions.None);
+                                                                     (player.ColonyGroups.Count > 0) ? ButtonCallback.EOnClickActions.ClosePopup : ButtonCallback.EOnClickActions.None);
 
 
-            CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(player.ID, null);
+            CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(player.ID.ID, null);
 
 
             ButtonCallback PlayerDeathButtonCallback = new ButtonCallback("Khanx.Compass.PlayerDeath",
@@ -237,7 +237,7 @@ namespace Compass
             
             if (data.ButtonIdentifier.Equals("Khanx.Compass.PlayerDeath"))
             {
-                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID, null);
+                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID.ID, null);
 
                 if (compassWaypoints == null)
                     return;
@@ -263,7 +263,7 @@ namespace Compass
 
             if (data.ButtonIdentifier.Equals("Khanx.Compass.ColonistDeath"))
             {
-                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID, null);
+                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID.ID, null);
 
                 if (compassWaypoints == null)
                     return;
@@ -298,7 +298,7 @@ namespace Compass
                 SendOrientationToPlayer(data.Player, orientation);
 
                 UIManager.AddorUpdateWorldMarker("Khanx.Compass.Goal" + data.Player.Name,
-                    data.Player.Colonies[colonyInt].Name,
+                    data.Player.ColonyGroups[colonyInt].Name,
                     colonyPosition,
                     ItemTypes.GetType("Khanx.Compass").Icon,
                     ToggleType.ItemSelected,
@@ -316,7 +316,7 @@ namespace Compass
             {
                 int waypointInt = data.Storage.GetAsOrDefault<int>("Khanx.Compass.Waypoint", 0);
 
-                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID, null);
+                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID.ID, null);
 
                 if (compassWaypoints == null || compassWaypoints.waypoints == null && compassWaypoints.waypoints.Count == 0)
                 {
@@ -380,12 +380,12 @@ namespace Compass
                     return;
                 }
 
-                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID, null);
+                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID.ID, null);
 
                 if (compassWaypoints == null || compassWaypoints.waypoints == null)
                 {
                     compassWaypoints = new CompassWaypoints(Vector3Int.invalidPos, Vector3Int.invalidPos, new List<WayPoint>() { new WayPoint(waypointName, new Vector3Int(data.Player.Position)) });
-                    CompassManager.Waypoints.Add(data.Player.ID, compassWaypoints);
+                    CompassManager.Waypoints.Add(data.Player.ID.ID, compassWaypoints);
                 }
                 else
                     compassWaypoints.waypoints.Add(new WayPoint(waypointName, new Vector3Int(data.Player.Position)));
@@ -397,7 +397,7 @@ namespace Compass
             {
                 int waypointInt = data.Storage.GetAsOrDefault<int>("Khanx.Compass.Waypoint", 0);
 
-                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID, null);
+                CompassWaypoints compassWaypoints = CompassManager.Waypoints.GetValueOrDefault(data.Player.ID.ID, null);
 
                 //This should not happen
                 if (compassWaypoints == null || compassWaypoints.waypoints == null && compassWaypoints.waypoints.Count == 0)
@@ -427,7 +427,7 @@ namespace Compass
         /// <returns></returns>
         public static Pipliz.Vector3Int GetColonyPosition(int colonyInt, Players.Player player)
         {
-            return (player.Colonies[colonyInt].GetClosestBanner(new Pipliz.Vector3Int(player.Position)).Position);
+            return (player.ColonyGroups[colonyInt].MainColony.GetClosestBanner(new Pipliz.Vector3Int(player.Position)).Position);
         }
 
         /// <summary>
