@@ -16,11 +16,5 @@ namespace Compass
 
             return defaultValue;
         }
-
-        public static Vector3Int Vector3Int(this Vector3Int vector, string asd)
-        {
-
-            return new Vector3Int();
-        }
     }
 }
