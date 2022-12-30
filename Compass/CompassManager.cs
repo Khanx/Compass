@@ -23,7 +23,7 @@ namespace Compass
     public static class CompassManager
     {
 
-        public static Dictionary<NetworkID, CompassWaypoints> Waypoints = new Dictionary<NetworkID, CompassWaypoints>();
+        public static Dictionary<Players.PlayerIDShort, CompassWaypoints> Waypoints = new Dictionary<Players.PlayerIDShort, CompassWaypoints>();
 
         public static List<WayPoint> list = new List<WayPoint>();
 
@@ -37,7 +37,7 @@ namespace Compass
             if (!File.Exists(waypointsFile))
                 return;
 
-            Waypoints = JsonConvert.DeserializeObject<Dictionary<NetworkID, CompassWaypoints>>(File.ReadAllText(waypointsFile));
+            Waypoints = JsonConvert.DeserializeObject<Dictionary<int, CompassWaypoints>>(File.ReadAllText(waypointsFile)).ToDictionary(pair => new Players.PlayerIDShort(pair.Key), pair => pair.Value);        
         }
 
         [ModLoader.ModCallback(ModLoader.EModCallbackType.OnAutoSaveWorld, "Khanx.Compass.AutoSave")]
@@ -50,7 +50,10 @@ namespace Compass
             if (Waypoints.Count(w => w.Value.waypoints.Count > 0) == 0)
                 return;
 
-            string json = JsonConvert.SerializeObject(Waypoints.Where(v => v.Value.waypoints.Count > 0).ToDictionary(k => k.Key, v => v.Value));
+            var tempWaypoints = Waypoints.Where(v => v.Value.waypoints.Count > 0).ToDictionary(k => k.Key, v => v.Value);
+            Dictionary<int, CompassWaypoints> intWayPoints = tempWaypoints.ToDictionary(pair => pair.Key.ID, pair => pair.Value);
+
+            string json = JsonConvert.SerializeObject(intWayPoints);
 
             File.WriteAllText(waypointsFile, json);
         }
@@ -58,12 +61,12 @@ namespace Compass
         [ModLoader.ModCallback(ModLoader.EModCallbackType.OnPlayerDeath, "Khanx.Compass.OnPlayerDeath")]
         public static void OnPlayerDeath(Players.Player player)
         {
-            CompassWaypoints compassWaypoints = Waypoints.GetValueOrDefault(player.ID, null);
+            CompassWaypoints compassWaypoints = Waypoints.GetValueOrDefault(player.ID.ID, null);
 
             if (compassWaypoints == null)
             {
                 compassWaypoints = new CompassWaypoints(new Vector3Int(player.Position), Vector3Int.invalidPos, new List<WayPoint>());
-                Waypoints.Add(player.ID, compassWaypoints);
+                Waypoints.Add(player.ID.ID, compassWaypoints);
             }
             else
                 compassWaypoints.playerDeath = new Vector3Int(player.Position);
@@ -77,17 +80,20 @@ namespace Compass
             if (colony == null)
                 return;
 
-            foreach (var owner in colony.Owners)
+
+            for(int i=0;i<colony.ColonyGroup.Owners.Count;i++)
             {
+                var owner = colony.ColonyGroup.Owners[i];
+
                 if (owner.ConnectionState != Players.EConnectionState.Connected)
                     continue;
 
-                CompassWaypoints compassMarkers = Waypoints.GetValueOrDefault(owner.ID, null);
+                CompassWaypoints compassMarkers = Waypoints.GetValueOrDefault(owner.ID.ID, null);
 
                 if (compassMarkers == null)
                 {
                     compassMarkers = new CompassWaypoints(Vector3Int.invalidPos, colonist.Position, new List<WayPoint>());
-                    Waypoints.Add(owner.ID, compassMarkers);
+                    Waypoints.Add(owner.ID.ID, compassMarkers);
                 }
                 else
                     compassMarkers.colonistDeath = colonist.Position;
