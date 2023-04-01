@@ -3,6 +3,7 @@ using NetworkUI;
 using NetworkUI.Items;
 using Pipliz;
 using System.Collections.Generic;
+using System.Linq;
 using static colonyshared.NetworkUI.UIGeneration.WorldMarkerSettings;
 
 namespace Compass
@@ -109,18 +110,9 @@ namespace Compass
                                                                        30,
                                                                        ButtonCallback.EOnClickActions.ClosePopup);
 
-            List<string> colonies = new List<string>();
+            List<string> colonies = GetColonies(player).Select(x => x.Name).ToList();
 
-            if (player.ColonyGroups.Count > 0)
-            {
-                for(int i=0;i<player.ColonyGroups.Count;i++)
-                {
-                    var col = player.ColonyGroups[i];
-
-                    colonies.Add(col.Name);
-                }
-            }
-            else
+            if (colonies.Count == 0)
                 colonies.Add("-");
 
             Label ColonyLabel = new Label(new LabelData("Colony:", UnityEngine.Color.white));
@@ -298,7 +290,7 @@ namespace Compass
                 SendOrientationToPlayer(data.Player, orientation);
 
                 UIManager.AddorUpdateWorldMarker("Khanx.Compass.Goal" + data.Player.Name,
-                    data.Player.ColonyGroups[colonyInt].Name,
+                    GetColonies(data.Player)[colonyInt].Name,
                     colonyPosition,
                     ItemTypes.GetType("Khanx.Compass").Icon,
                     ToggleType.ItemSelected,
@@ -419,6 +411,21 @@ namespace Compass
             }
         }
 
+        public static List<Colony> GetColonies(Players.Player player)
+        {
+            List<Colony> colonies = new List<Colony>();
+
+            for(int i = 0; i < player.ColonyGroups.Count; i++)
+            {
+                for (int j = 0; j < player.ColonyGroups[i].Colonies.Count; j++)
+                {
+                    colonies.Add(player.ColonyGroups[i].Colonies[j]);
+                }
+            }
+
+            return colonies;
+        }
+
         /// <summary>
         /// Returns the Position of the Colony <player>.Colonies[<colonyInt>] (comes from the UI)
         /// </summary>
@@ -427,7 +434,7 @@ namespace Compass
         /// <returns></returns>
         public static Pipliz.Vector3Int GetColonyPosition(int colonyInt, Players.Player player)
         {
-            return (player.ColonyGroups[colonyInt].MainColony.GetClosestBanner(new Pipliz.Vector3Int(player.Position)).Position);
+            return (GetColonies(player)[colonyInt].Banners[0].Position);
         }
 
         /// <summary>
